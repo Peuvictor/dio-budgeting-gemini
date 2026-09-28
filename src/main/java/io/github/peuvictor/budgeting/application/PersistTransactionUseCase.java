@@ -4,7 +4,9 @@ import io.github.peuvictor.budgeting.application.input.PersistTransactionInput;
 import io.github.peuvictor.budgeting.application.output.TransactionOutput;
 import io.github.peuvictor.budgeting.domain.Transaction;
 import io.github.peuvictor.budgeting.domain.TransactionRepository;
+import org.springframework.stereotype.Service;
 
+@Service
 public class PersistTransactionUseCase {
 
     private final TransactionRepository transactionRepository;

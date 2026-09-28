@@ -1,8 +1,10 @@
 package io.github.peuvictor.budgeting.domain;
 
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 @Getter
+@AllArgsConstructor
 public class Transaction {
 
     private final TransactionId id;
