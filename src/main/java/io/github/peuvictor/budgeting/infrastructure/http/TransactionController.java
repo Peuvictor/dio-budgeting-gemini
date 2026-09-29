@@ -6,9 +6,13 @@ import io.github.peuvictor.budgeting.domain.Category;
 import io.github.peuvictor.budgeting.infrastructure.ai.GeminiAudioTranscriptionService;
 import io.github.peuvictor.budgeting.infrastructure.http.request.TransactionRequest;
 import io.github.peuvictor.budgeting.infrastructure.http.response.TransactionResponse;
+import io.github.peuvictor.budgeting.GeminiTextToSpeechService;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -33,11 +37,13 @@ public class TransactionController {
     private final ListTransactionsByCategoryUseCase listTransactionsByCategoryUseCase;
     private final GeminiAudioTranscriptionService audioTranscriptionService;
     private final ChatClient chatClient;
+    private final GeminiTextToSpeechService textToSpeechService;
 
     public TransactionController(
             PersistTransactionUseCase persistTransactionUseCase,
             ListTransactionsByCategoryUseCase listTransactionsByCategoryUseCase,
             GeminiAudioTranscriptionService audioTranscriptionService,
+            GeminiTextToSpeechService textToSpeechService,
             ChatClient.Builder chatClientBuilder,
             @Value("classpath:/prompts/system-message.st") Resource systemPrompt
     ) throws IOException {
@@ -45,6 +51,7 @@ public class TransactionController {
         this.persistTransactionUseCase = persistTransactionUseCase;
         this.listTransactionsByCategoryUseCase = listTransactionsByCategoryUseCase;
         this.audioTranscriptionService = audioTranscriptionService;
+        this.textToSpeechService = textToSpeechService;
 
         this.chatClient = chatClientBuilder
                 .defaultSystem(
@@ -83,9 +90,10 @@ public class TransactionController {
 
     @PostMapping(
             value = "/ai",
-            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
+            produces = "audio/wav"
     )
-    public String transcribe(
+    public ResponseEntity<ByteArrayResource> transcribe(
             @RequestParam("file") MultipartFile file
     ) {
         var transcription = audioTranscriptionService.transcribe(
@@ -99,6 +107,17 @@ public class TransactionController {
                 .call()
                 .content();
 
-        return result;
+        byte[] audio = textToSpeechService.synthesize(result);
+
+        var resource = new ByteArrayResource(audio);
+
+        return ResponseEntity.ok()
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"response.wav\""
+                )
+                .contentType(MediaType.parseMediaType("audio/wav"))
+                .contentLength(audio.length)
+                .body(resource);
     }
 }
