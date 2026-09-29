@@ -3,6 +3,7 @@ package io.github.peuvictor.budgeting.application;
 import io.github.peuvictor.budgeting.application.output.TransactionOutput;
 import io.github.peuvictor.budgeting.domain.Category;
 import io.github.peuvictor.budgeting.domain.TransactionRepository;
+import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -18,6 +19,10 @@ public class ListTransactionsByCategoryUseCase {
         this.transactionRepository = transactionRepository;
     }
 
+    @Tool(
+            name = "list-transactions-by-category",
+            description = "Lista transações financeiras por categoria"
+    )
     public List<TransactionOutput> execute(Category category) {
         return transactionRepository.findAllByCategory(category)
                 .stream()

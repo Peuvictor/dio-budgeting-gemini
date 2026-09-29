@@ -5,6 +5,9 @@ import io.github.peuvictor.budgeting.application.PersistTransactionUseCase;
 import io.github.peuvictor.budgeting.domain.Category;
 import io.github.peuvictor.budgeting.infrastructure.http.request.TransactionRequest;
 import io.github.peuvictor.budgeting.infrastructure.http.response.TransactionResponse;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -14,6 +17,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.io.IOException;
+import java.nio.charset.Charset;
 import java.util.List;
 
 @RestController
@@ -22,13 +27,29 @@ public class TransactionController {
 
     private final PersistTransactionUseCase persistTransactionUseCase;
     private final ListTransactionsByCategoryUseCase listTransactionsByCategoryUseCase;
+    private final ChatClient chatClient;
 
     public TransactionController(
             PersistTransactionUseCase persistTransactionUseCase,
-            ListTransactionsByCategoryUseCase listTransactionsByCategoryUseCase
-    ) {
+            ListTransactionsByCategoryUseCase listTransactionsByCategoryUseCase,
+            ChatClient.Builder chatClientBuilder,
+            @Value("classpath:/prompts/system-message.st") Resource systemPrompt
+    ) throws IOException {
+
         this.persistTransactionUseCase = persistTransactionUseCase;
         this.listTransactionsByCategoryUseCase = listTransactionsByCategoryUseCase;
+
+        this.chatClient = chatClientBuilder
+                .defaultSystem(
+                        systemPrompt.getContentAsString(
+                                Charset.defaultCharset()
+                        )
+                )
+                .defaultTools(
+                        persistTransactionUseCase,
+                        listTransactionsByCategoryUseCase
+                )
+                .build();
     }
 
     @PostMapping
