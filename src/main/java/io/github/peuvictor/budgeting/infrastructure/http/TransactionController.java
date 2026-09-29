@@ -3,19 +3,23 @@ package io.github.peuvictor.budgeting.infrastructure.http;
 import io.github.peuvictor.budgeting.application.ListTransactionsByCategoryUseCase;
 import io.github.peuvictor.budgeting.application.PersistTransactionUseCase;
 import io.github.peuvictor.budgeting.domain.Category;
+import io.github.peuvictor.budgeting.infrastructure.ai.GeminiAudioTranscriptionService;
 import io.github.peuvictor.budgeting.infrastructure.http.request.TransactionRequest;
 import io.github.peuvictor.budgeting.infrastructure.http.response.TransactionResponse;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.nio.charset.Charset;
@@ -27,17 +31,20 @@ public class TransactionController {
 
     private final PersistTransactionUseCase persistTransactionUseCase;
     private final ListTransactionsByCategoryUseCase listTransactionsByCategoryUseCase;
+    private final GeminiAudioTranscriptionService audioTranscriptionService;
     private final ChatClient chatClient;
 
     public TransactionController(
             PersistTransactionUseCase persistTransactionUseCase,
             ListTransactionsByCategoryUseCase listTransactionsByCategoryUseCase,
+            GeminiAudioTranscriptionService audioTranscriptionService,
             ChatClient.Builder chatClientBuilder,
             @Value("classpath:/prompts/system-message.st") Resource systemPrompt
     ) throws IOException {
 
         this.persistTransactionUseCase = persistTransactionUseCase;
         this.listTransactionsByCategoryUseCase = listTransactionsByCategoryUseCase;
+        this.audioTranscriptionService = audioTranscriptionService;
 
         this.chatClient = chatClientBuilder
                 .defaultSystem(
@@ -72,5 +79,26 @@ public class TransactionController {
                 .stream()
                 .map(TransactionResponse::from)
                 .toList();
+    }
+
+    @PostMapping(
+            value = "/ai",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
+    public String transcribe(
+            @RequestParam("file") MultipartFile file
+    ) {
+        var transcription = audioTranscriptionService.transcribe(
+                file.getResource(),
+                file.getContentType()
+        );
+
+        var result = chatClient
+                .prompt()
+                .user(transcription)
+                .call()
+                .content();
+
+        return result;
     }
 }
