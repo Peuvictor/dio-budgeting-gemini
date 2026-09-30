@@ -6,7 +6,7 @@ O projeto faz parte de um desafio da DIO sobre construção de uma API inteligen
 
 ## Objetivo
 
-Construir um assistente financeiro capaz de receber comandos em texto ou áudio, interpretar a intenção do usuário, executar ações reais da aplicação e responder de forma natural.
+Construir um assistente financeiro capaz de receber comandos por áudio, interpretar a intenção do usuário, executar ações reais da aplicação e responder em voz. O projeto também mantém endpoints de estudo para conversar diretamente com o modelo por texto.
 
 O fluxo principal implementado é:
 
@@ -39,6 +39,7 @@ Gemini Text-to-Speech
 - Gemini 2.5 Flash
 - Gemini Text-to-Speech
 - Spring Web
+- Spring Validation
 - Spring Data JPA
 - PostgreSQL 14
 - Docker Compose
@@ -93,18 +94,12 @@ list-transactions-by-category
 
 ## Transcrição de áudio
 
-A transcrição foi adaptada para Gemini multimodal por meio do `ChatModel`.
+A transcrição usa o Gemini multimodal por meio do `ChatModel`. O serviço `GeminiAudioTranscriptionService` é chamado no fluxo de `POST /transactions/ai`. Não há endpoint HTTP exclusivo para transcrição.
 
 Serviço:
 
 ```text
 GeminiAudioTranscriptionService
-```
-
-Endpoint dedicado:
-
-```http
-POST /api/transcribe
 ```
 
 ## Text-to-Speech
@@ -130,7 +125,14 @@ Endpoint dedicado:
 POST /api/synthesize
 ```
 
-A saída é retornada em formato WAV.
+A saída é retornada em formato WAV. Exemplo de chamada:
+
+```bash
+curl -X POST http://localhost:8080/api/synthesize \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Seu gasto foi registrado."}' \
+  -o speech.wav
+```
 
 ## Domínio de transações
 
@@ -143,7 +145,7 @@ amount
 category
 ```
 
-`amount` é armazenado em **centavos**.
+`amount` é recebido e armazenado em **centavos**. Na resposta da API REST, o campo `amount` é apresentado em reais.
 
 Exemplos:
 
@@ -161,6 +163,8 @@ OTHER
 ```
 
 O identificador é representado por `TransactionId` e utiliza UUID.
+
+O domínio só aceita transações com descrição não vazia de até 255 caracteres, valor maior que zero e categoria definida. Essas regras também são aplicadas quando o Gemini chama a ferramenta de persistência.
 
 ## Persistência
 
@@ -185,7 +189,7 @@ spring.jpa.hibernate.ddl-auto=update
 
 ## PostgreSQL com Docker Compose
 
-Configuração atual:
+Configuração de desenvolvimento em `compose.yml`:
 
 ```yaml
 services:
@@ -197,6 +201,12 @@ services:
       POSTGRES_PASSWORD: app
     ports:
       - "5433:5432"
+```
+
+Iniciar o banco:
+
+```bash
+docker compose up -d database
 ```
 
 Verificar container:
@@ -246,6 +256,22 @@ Status:
 
 ```text
 201 Created
+```
+
+Para criar uma transação, `description` deve conter texto e ter no máximo 255 caracteres, `amount` deve ser maior que zero (em centavos), e `category` deve ser uma das categorias disponíveis. As mesmas regras são aplicadas às transações registradas pelo assistente de IA. Um valor ausente ou inválido recebe `400 Bad Request`.
+
+Uma requisição com `amount: 0`, por exemplo, recebe `400 Bad Request`:
+
+```json
+{
+  "type": "about:blank",
+  "title": "Bad Request",
+  "status": 400,
+  "detail": "Dados da transação inválidos",
+  "errors": [
+    { "field": "amount", "message": "deve ser maior que zero" }
+  ]
+}
 ```
 
 ### Listar por categoria
@@ -324,48 +350,31 @@ Ele orienta o modelo a extrair dados de transações, utilizar as tools disponí
 ## Estrutura do projeto
 
 ```text
-src
-├── main
-│   ├── java/io/github/peuvictor/budgeting
-│   │   ├── application
-│   │   │   ├── input
-│   │   │   │   └── PersistTransactionInput.java
-│   │   │   ├── output
-│   │   │   │   └── TransactionOutput.java
-│   │   │   ├── PersistTransactionUseCase.java
-│   │   │   └── ListTransactionsByCategoryUseCase.java
-│   │   ├── domain
-│   │   │   ├── Category.java
-│   │   │   ├── Transaction.java
-│   │   │   ├── TransactionId.java
-│   │   │   └── TransactionRepository.java
-│   │   ├── infrastructure
-│   │   │   ├── http
-│   │   │   │   ├── request/TransactionRequest.java
-│   │   │   │   ├── response/TransactionResponse.java
-│   │   │   │   └── TransactionController.java
-│   │   │   ├── ia
-│   │   │   │   └── GeminiAudioTranscriptionService.java
-│   │   │   └── persistence
-│   │   │       ├── entity/TransactionEntity.java
-│   │   │       └── repository
-│   │   │           ├── TransactionEntityRepository.java
-│   │   │           └── JpaTransactionRepository.java
-│   │   ├── DioBudgetingGeminiApplication.java
-│   │   ├── ChatModelController.java
-│   │   ├── ChatClientController.java
-│   │   ├── TranscriptionController.java
-│   │   ├── TextToSpeechController.java
-│   │   └── GeminiTextToSpeechService.java
-│   └── resources
-│       ├── prompts/system-message.st
-│       └── application.properties
-└── test
-    ├── java/io/github/peuvictor/budgeting
-    │   ├── GoogleGenAiChatModelIT.java
-    │   ├── GeminiAudioTranscriptionIT.java
-    │   └── GeminiTextToSpeechIT.java
-    └── resources/audio/Recording1.m4a
+src/main/java/io/github/peuvictor/budgeting/
+├── application/
+│   ├── input/ e output/               # dados dos casos de uso
+│   ├── port/                           # contratos de áudio e assistente
+│   ├── PersistTransactionUseCase.java
+│   ├── ListTransactionsByCategoryUseCase.java
+│   └── ProcessAudioTransactionUseCase.java
+├── domain/                             # transação, categorias e validação
+├── infrastructure/
+│   ├── http/                           # endpoints, DTOs e erros de validação
+│   ├── ia/                             # transcrição e assistente Spring AI
+│   └── persistence/                    # entidade e repositórios JPA
+├── ChatModelController.java
+├── ChatClientController.java
+├── TextToSpeechController.java
+└── GeminiTextToSpeechService.java
+
+src/main/resources/
+├── application.properties
+└── prompts/system-message.st
+
+src/test/java/io/github/peuvictor/budgeting/
+├── application/ e domain/             # testes locais das regras
+├── infrastructure/http/               # testes locais do endpoint REST
+└── *IT.java                            # integrações com Gemini
 ```
 
 ## Como executar
@@ -387,13 +396,19 @@ echo
 export GOOGLE_API_KEY
 ```
 
-### 3. Compile
+### 3. Inicie o PostgreSQL
+
+```bash
+docker compose up -d database
+```
+
+### 4. Compile
 
 ```bash
 ./gradlew compileJava
 ```
 
-### 4. Execute
+### 5. Execute
 
 ```bash
 ./gradlew bootRun
@@ -413,7 +428,16 @@ localhost:5433
 
 ## Testes
 
-O projeto possui testes de integração para:
+Os testes locais verificam as regras do domínio, a rejeição de entradas inválidas antes da persistência e as respostas HTTP de validação. Eles não chamam o Gemini nem precisam de PostgreSQL:
+
+```bash
+./gradlew test \
+  --tests 'io.github.peuvictor.budgeting.domain.TransactionTest' \
+  --tests 'io.github.peuvictor.budgeting.application.PersistTransactionUseCaseTest' \
+  --tests 'io.github.peuvictor.budgeting.infrastructure.http.TransactionControllerValidationTest'
+```
+
+O projeto também possui testes de integração para:
 
 - `ChatModel`;
 - `ChatClient`;
@@ -422,13 +446,13 @@ O projeto possui testes de integração para:
 - Text-to-Speech com Gemini;
 - carregamento do contexto Spring.
 
-Executar todos:
+Para executar a suíte completa, configure `GOOGLE_API_KEY`, inicie o PostgreSQL e execute:
 
 ```bash
 ./gradlew test
 ```
 
-Alguns testes fazem chamadas reais ao Gemini, portanto podem consumir quota e estão sujeitos a indisponibilidades temporárias do provedor.
+Os testes de integração fazem chamadas reais ao Gemini; podem consumir quota e estão sujeitos a indisponibilidades temporárias do provedor. Sem `GOOGLE_API_KEY`, a suíte completa não consegue carregar o contexto da aplicação.
 
 ## Arquitetura
 
@@ -460,6 +484,7 @@ PostgreSQL                          ✅
 Spring Data JPA                     ✅
 Docker Compose                      ✅
 POST /transactions                  ✅
+Validação de transações             ✅
 GET /transactions/{category}        ✅
 Transcrição de áudio                ✅
 Text-to-Speech                      ✅
@@ -482,6 +507,7 @@ Resposta em áudio WAV               ✅
 - PostgreSQL;
 - Docker Compose;
 - endpoints REST;
+- validação de dados com Bean Validation;
 - multipart/form-data;
 - processamento multimodal de áudio;
 - transcrição de voz;

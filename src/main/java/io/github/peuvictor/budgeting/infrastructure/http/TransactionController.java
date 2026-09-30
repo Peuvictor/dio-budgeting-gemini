@@ -6,6 +6,7 @@ import io.github.peuvictor.budgeting.application.ProcessAudioTransactionUseCase;
 import io.github.peuvictor.budgeting.domain.Category;
 import io.github.peuvictor.budgeting.infrastructure.http.request.TransactionRequest;
 import io.github.peuvictor.budgeting.infrastructure.http.response.TransactionResponse;
+import jakarta.validation.Valid;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -45,7 +46,7 @@ public class TransactionController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public TransactionResponse createTransaction(
-            @RequestBody TransactionRequest request
+            @Valid @RequestBody TransactionRequest request
     ) {
         var output = persistTransactionUseCase.execute(
                 request.toInput()
