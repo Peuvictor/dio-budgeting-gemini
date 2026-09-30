@@ -1,5 +1,6 @@
 package io.github.peuvictor.budgeting;
 
+import io.github.peuvictor.budgeting.application.port.SpeechSynthesizer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
@@ -9,7 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 @Service
-public class GeminiTextToSpeechService {
+public class GeminiTextToSpeechService implements SpeechSynthesizer {
 
     private final RestClient restClient;
     private final String model;
@@ -29,6 +30,7 @@ public class GeminiTextToSpeechService {
         this.voice = voice;
     }
 
+    @Override
     public byte[] synthesize(String text) {
         Map<String, Object> requestBody = Map.of(
                 "model", model,
@@ -68,7 +70,9 @@ public class GeminiTextToSpeechService {
                 .filter(step -> "model_output".equals(step.get("type")))
                 .findFirst()
                 .orElseThrow(() ->
-                        new IllegalStateException("Gemini não retornou model_output")
+                        new IllegalStateException(
+                                "Gemini não retornou model_output"
+                        )
                 );
 
         List<?> content = (List<?>) modelOutput.get("content");
@@ -78,7 +82,9 @@ public class GeminiTextToSpeechService {
                 .filter(item -> "audio".equals(item.get("type")))
                 .findFirst()
                 .orElseThrow(() ->
-                        new IllegalStateException("Gemini não retornou conteúdo de áudio")
+                        new IllegalStateException(
+                                "Gemini não retornou conteúdo de áudio"
+                        )
                 );
 
         String audioBase64 = (String) audioContent.get("data");

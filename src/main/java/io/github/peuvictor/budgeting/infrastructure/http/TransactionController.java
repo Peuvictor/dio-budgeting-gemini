@@ -2,19 +2,15 @@ package io.github.peuvictor.budgeting.infrastructure.http;
 
 import io.github.peuvictor.budgeting.application.ListTransactionsByCategoryUseCase;
 import io.github.peuvictor.budgeting.application.PersistTransactionUseCase;
+import io.github.peuvictor.budgeting.application.ProcessAudioTransactionUseCase;
 import io.github.peuvictor.budgeting.domain.Category;
-import io.github.peuvictor.budgeting.infrastructure.ai.GeminiAudioTranscriptionService;
 import io.github.peuvictor.budgeting.infrastructure.http.request.TransactionRequest;
 import io.github.peuvictor.budgeting.infrastructure.http.response.TransactionResponse;
-import io.github.peuvictor.budgeting.GeminiTextToSpeechService;
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.Resource;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -26,7 +22,6 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.nio.charset.Charset;
 import java.util.List;
 
 @RestController
@@ -35,35 +30,16 @@ public class TransactionController {
 
     private final PersistTransactionUseCase persistTransactionUseCase;
     private final ListTransactionsByCategoryUseCase listTransactionsByCategoryUseCase;
-    private final GeminiAudioTranscriptionService audioTranscriptionService;
-    private final ChatClient chatClient;
-    private final GeminiTextToSpeechService textToSpeechService;
+    private final ProcessAudioTransactionUseCase processAudioTransactionUseCase;
 
     public TransactionController(
             PersistTransactionUseCase persistTransactionUseCase,
             ListTransactionsByCategoryUseCase listTransactionsByCategoryUseCase,
-            GeminiAudioTranscriptionService audioTranscriptionService,
-            GeminiTextToSpeechService textToSpeechService,
-            ChatClient.Builder chatClientBuilder,
-            @Value("classpath:/prompts/system-message.st") Resource systemPrompt
-    ) throws IOException {
-
+            ProcessAudioTransactionUseCase processAudioTransactionUseCase
+    ) {
         this.persistTransactionUseCase = persistTransactionUseCase;
         this.listTransactionsByCategoryUseCase = listTransactionsByCategoryUseCase;
-        this.audioTranscriptionService = audioTranscriptionService;
-        this.textToSpeechService = textToSpeechService;
-
-        this.chatClient = chatClientBuilder
-                .defaultSystem(
-                        systemPrompt.getContentAsString(
-                                Charset.defaultCharset()
-                        )
-                )
-                .defaultTools(
-                        persistTransactionUseCase,
-                        listTransactionsByCategoryUseCase
-                )
-                .build();
+        this.processAudioTransactionUseCase = processAudioTransactionUseCase;
     }
 
     @PostMapping
@@ -71,18 +47,19 @@ public class TransactionController {
     public TransactionResponse createTransaction(
             @RequestBody TransactionRequest request
     ) {
-        var transaction = persistTransactionUseCase.execute(
+        var output = persistTransactionUseCase.execute(
                 request.toInput()
         );
 
-        return TransactionResponse.from(transaction);
+        return TransactionResponse.from(output);
     }
 
     @GetMapping("/{category}")
     public List<TransactionResponse> readTransactions(
             @PathVariable Category category
     ) {
-        return listTransactionsByCategoryUseCase.execute(category)
+        return listTransactionsByCategoryUseCase
+                .execute(category)
                 .stream()
                 .map(TransactionResponse::from)
                 .toList();
@@ -93,21 +70,14 @@ public class TransactionController {
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
             produces = "audio/wav"
     )
-    public ResponseEntity<ByteArrayResource> transcribe(
+    public ResponseEntity<ByteArrayResource> processAudio(
             @RequestParam("file") MultipartFile file
-    ) {
-        var transcription = audioTranscriptionService.transcribe(
-                file.getResource(),
+    ) throws IOException {
+
+        byte[] audio = processAudioTransactionUseCase.execute(
+                file.getBytes(),
                 file.getContentType()
         );
-
-        var result = chatClient
-                .prompt()
-                .user(transcription)
-                .call()
-                .content();
-
-        byte[] audio = textToSpeechService.synthesize(result);
 
         var resource = new ByteArrayResource(audio);
 
