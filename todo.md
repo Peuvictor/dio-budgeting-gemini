@@ -1,10 +1,10 @@
 # Melhorias do projeto
 
-Lista de próximas tarefas para a API de controle financeiro. Os itens abaixo representam trabalho futuro; as funcionalidades já implementadas estão descritas no [README](README.md).
+Lista de melhorias para a API de controle financeiro. Os itens marcados representam tarefas concluídas; as funcionalidades implementadas estão descritas no [README](README.md).
 
 ## 1. Confiabilidade do fluxo atual
 
-- [ ] Validar o arquivo recebido em `POST /transactions/ai`: presença, tamanho máximo e formatos de áudio aceitos. Retornar erros HTTP claros antes de chamar o provedor.
+- [x] Validar o arquivo recebido em `POST /transactions/ai`: presença, tamanho máximo e formatos de áudio aceitos. Retornar erros HTTP claros antes de chamar o provedor.
 - [ ] Padronizar as respostas de erro para entradas inválidas, falhas do banco e falhas dos serviços de IA, sem expor dados sensíveis.
 - [ ] Adicionar limites de tempo e tratamento de falhas para transcrição, interpretação e síntese de voz.
 - [ ] Tornar o registro por áudio idempotente para que uma repetição da requisição não crie transações duplicadas.

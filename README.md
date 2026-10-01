@@ -293,14 +293,59 @@ Content-Type: multipart/form-data
 
 ```bash
 curl -X POST http://localhost:8080/transactions/ai \
-  -F "file=@src/test/resources/audio/Recording1.m4a" \
+  -F "file=@src/test/resources/audio/Recording1.m4a;type=audio/m4a" \
   -o response.wav
 ```
+
+O campo `file` deve conter um arquivo de áudio não vazio, com até **10 MiB**. O limite da requisição multipart inteira é **11 MiB**, incluindo os cabeçalhos e delimitadores.
+
+Tipos MIME aceitos no campo `file`:
+
+| Formato | Tipos aceitos | Tipo encaminhado para transcrição |
+| --- | --- | --- |
+| M4A | `audio/m4a`, `audio/mp4`, `audio/x-m4a` | `audio/m4a` |
+| MP3 | `audio/mp3`, `audio/mpeg` | `audio/mp3` |
+| WAV | `audio/wav`, `audio/x-wav` | `audio/wav` |
+
+A comparação ignora maiúsculas e minúsculas e desconsidera parâmetros MIME válidos. A validação usa o tipo declarado no upload; ela não inspeciona os bytes nem usa a extensão do arquivo para identificar o formato. Tipos ausentes, genéricos como `application/octet-stream` ou fora da lista são rejeitados. Por isso, o exemplo `curl` informa `type=audio/m4a` explicitamente.
+
+Os limites são configuráveis em `application.properties`. Nessas propriedades do Spring, `10MB` corresponde a 10 MiB:
+
+```properties
+spring.servlet.multipart.max-file-size=10MB
+spring.servlet.multipart.max-request-size=11MB
+```
+
+Uploads inválidos são rejeitados antes de chamar o processamento de IA:
+
+| Status HTTP | Motivo |
+| --- | --- |
+| `400 Bad Request` | Campo `file` ausente ou arquivo vazio |
+| `413 Content Too Large` | Arquivo ou requisição acima do limite |
+| `415 Unsupported Media Type` | Tipo MIME ausente, vazio, malformado, genérico ou não aceito |
+
+Os erros são retornados como `application/problem+json`, inclusive quando o cliente envia `Accept: audio/wav`. Exemplo de tipo MIME não aceito:
+
+```json
+{
+  "type": "about:blank",
+  "title": "Unsupported Media Type",
+  "status": 415,
+  "detail": "Arquivo de áudio inválido",
+  "errors": [
+    { "field": "file", "message": "Informe um tipo de áudio aceito: M4A, MP3 ou WAV" }
+  ]
+}
+```
+
+O sucesso retorna `200 OK` com o arquivo WAV `response.wav`.
 
 Fluxo:
 
 ```text
 MultipartFile
+    ↓
+Validação de tamanho e tipo MIME
     ↓
 GeminiAudioTranscriptionService
     ↓
@@ -428,14 +473,16 @@ localhost:5433
 
 ## Testes
 
-Os testes locais verificam as regras do domínio, a rejeição de entradas inválidas antes da persistência e as respostas HTTP de validação. Eles não chamam o Gemini nem precisam de PostgreSQL:
+Os testes locais verificam as regras do domínio, a rejeição de entradas inválidas antes da persistência e as respostas HTTP de validação, incluindo o upload de áudio. Eles não chamam o Gemini nem precisam de PostgreSQL:
 
 ```bash
 ./gradlew test \
   --tests 'io.github.peuvictor.budgeting.domain.TransactionTest' \
   --tests 'io.github.peuvictor.budgeting.application.PersistTransactionUseCaseTest' \
-  --tests 'io.github.peuvictor.budgeting.infrastructure.http.TransactionControllerValidationTest'
+  --tests 'io.github.peuvictor.budgeting.infrastructure.http.*Test'
 ```
+
+Os testes de upload cobrem arquivos ausentes ou vazios, tipos MIME inválidos e aceitos, normalização dos aliases e os limites de tamanho. `AudioUploadHttpTest` inicia um servidor HTTP local em uma porta disponível para verificar o parser multipart real, usando casos de uso simulados.
 
 O projeto também possui testes de integração para:
 
@@ -452,7 +499,7 @@ Para executar a suíte completa, configure `GOOGLE_API_KEY`, inicie o PostgreSQL
 ./gradlew test
 ```
 
-Os testes de integração fazem chamadas reais ao Gemini; podem consumir quota e estão sujeitos a indisponibilidades temporárias do provedor. Sem `GOOGLE_API_KEY`, a suíte completa não consegue carregar o contexto da aplicação.
+Os testes de integração com Gemini fazem chamadas reais ao provedor; podem consumir quota e estão sujeitos a indisponibilidades temporárias. Sem `GOOGLE_API_KEY`, a suíte completa não consegue carregar o contexto da aplicação.
 
 ## Arquitetura
 
@@ -489,6 +536,7 @@ GET /transactions/{category}        ✅
 Transcrição de áudio                ✅
 Text-to-Speech                      ✅
 POST /transactions/ai               ✅
+Validação de upload de áudio        ✅
 Resposta em áudio WAV               ✅
 ```
 
