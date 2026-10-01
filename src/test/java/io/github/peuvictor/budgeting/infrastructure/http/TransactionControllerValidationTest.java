@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.springframework.boot.servlet.autoconfigure.MultipartProperties;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -43,7 +44,8 @@ class TransactionControllerValidationTest {
         TransactionController controller = new TransactionController(
                 persistTransactionUseCase,
                 mock(ListTransactionsByCategoryUseCase.class),
-                mock(ProcessAudioTransactionUseCase.class)
+                mock(ProcessAudioTransactionUseCase.class),
+                new AudioUploadValidator(new MultipartProperties())
         );
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new TransactionValidationHandler())

@@ -32,15 +32,18 @@ public class TransactionController {
     private final PersistTransactionUseCase persistTransactionUseCase;
     private final ListTransactionsByCategoryUseCase listTransactionsByCategoryUseCase;
     private final ProcessAudioTransactionUseCase processAudioTransactionUseCase;
+    private final AudioUploadValidator audioUploadValidator;
 
     public TransactionController(
             PersistTransactionUseCase persistTransactionUseCase,
             ListTransactionsByCategoryUseCase listTransactionsByCategoryUseCase,
-            ProcessAudioTransactionUseCase processAudioTransactionUseCase
+            ProcessAudioTransactionUseCase processAudioTransactionUseCase,
+            AudioUploadValidator audioUploadValidator
     ) {
         this.persistTransactionUseCase = persistTransactionUseCase;
         this.listTransactionsByCategoryUseCase = listTransactionsByCategoryUseCase;
         this.processAudioTransactionUseCase = processAudioTransactionUseCase;
+        this.audioUploadValidator = audioUploadValidator;
     }
 
     @PostMapping
@@ -75,9 +78,10 @@ public class TransactionController {
             @RequestParam("file") MultipartFile file
     ) throws IOException {
 
+        String contentType = audioUploadValidator.validate(file);
         byte[] audio = processAudioTransactionUseCase.execute(
                 file.getBytes(),
-                file.getContentType()
+                contentType
         );
 
         var resource = new ByteArrayResource(audio);
